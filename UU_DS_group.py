@@ -5,6 +5,7 @@ import numpy as np
 from tqdm import tqdm 
 
 
+
 def generate_UU_group():
     group = np.zeros((64,3))
     index = 0
@@ -114,7 +115,7 @@ def group_elem_2_idx(elem):
     return idx
 
 def exponents_forall_elements(group, mul_func):
-    exponents = np.zeros(len(group))
+    exponents = np.ones(len(group))
     for i, elem in enumerate(group):
         transformed_elem = elem
         #print(elem)
@@ -155,7 +156,13 @@ group = generate_UU_group()
 CCs = generate_conjugacy_classes(group, UU_multiplication, UU_inverse)
 print(len(CCs))
 
-print(exponents_forall_elements(group, UU_multiplication))
+for cc in CCs:
+    print(cc)
+
+orders = exponents_forall_elements(group, UU_multiplication)
+uneque_orders, counts = np.unique(orders, return_counts = True)
+order_counts = dict(zip(uneque_orders, counts))
+print(order_counts)
 
 
 

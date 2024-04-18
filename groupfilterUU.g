@@ -1,20 +1,25 @@
 # Start with all groups of order 64
 allGroups := AllGroups(64);
+Print(Length(allGroups),"\n");
 
 # Filter for non-abelian groups
 nonAbelianGroups := Filtered(allGroups, g -> not IsAbelian(g));
+Print(Length(nonAbelianGroups),"\n");
 
 # Filter for groups with exactly 2 generators
 groupsTwoGenerators := Filtered(nonAbelianGroups, g -> Length(MinimalGeneratingSet(g)) = 2);
+Print(Length(groupsTwoGenerators),"\n");
 
 # Filter for groups with 22 conjugacy classes
 groups22ConjugacyClasses := Filtered(groupsTwoGenerators, g -> Length(ConjugacyClasses(g)) = 22);
+Print(Length(groups22ConjugacyClasses),"\n");
 
-# Filter for groups with 4 conjugacy classes of size 1
-groups4SingletonClasses := Filtered(groups22ConjugacyClasses, g -> Length(Filtered(ConjugacyClasses(g), c -> Size(c) = 1)) = 4);
 
 # Filter for groups with exponent 8
-groupsExponent8 := Filtered(groups4SingletonClasses, g -> Exponent(g) = 8);
+groupsExponent8 := Filtered(groups22ConjugacyClasses, g -> Exponent(g) = 8);
+
+Print(Length(groupsExponent8),"\n");
+
 
 # Finally, filter based on the distribution of conjugacy class sizes
 groupsCCstructure := Filtered(groupsExponent8, g ->
@@ -22,9 +27,14 @@ groupsCCstructure := Filtered(groupsExponent8, g ->
     (Length(Filtered(ConjugacyClasses(g), c -> Size(c) = 2)) = 6)
 );
 
+Print(Length(groupsCCstructure),"\n");
+
 groupsCenterC4 := Filtered(groupsCCstructure, g -> 
     IsCyclic(Center(g)) and Size(Center(g)) = 4
 );
+
+Print(Length(groupsCenterC4),"\n");
+
 
 G := groupsCenterC4[1]; # One of your candidate groups
 CenterG := Center(G);

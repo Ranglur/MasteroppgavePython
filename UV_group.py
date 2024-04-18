@@ -186,7 +186,7 @@ def calculate_omega(group_elements):
     return omega_matrix
 
 
-def plot_omega_matrix(omega_matrix):
+def plot_omega_matrix(omega_matrix, figname = None):
     """
     Plot the omega matrix using a heatmap to visualize the phase relationships between group elements.
     
@@ -201,10 +201,12 @@ def plot_omega_matrix(omega_matrix):
     plt.xlabel("Group Elements (g)")
     plt.ylabel("Group Elements (h)")
     plt.title("Omega Matrix")
+    if figname != None:
+        plt.savefig(figname)
     plt.show()
 
 
-def plot_mul_table(mul_table):
+def plot_mul_table(mul_table, figname = None):
     """
     Visualize the multiplication table of a group with boolean array elements.
     
@@ -237,6 +239,9 @@ def plot_mul_table(mul_table):
     plt.xlabel("Group Elements (g)")
     plt.ylabel("Group Elements (h)")
     plt.title("Multiplication Table")
+    if figname != None:
+        plt.savefig(figname)
+
     plt.show()
 
 def generate_conjugacy_classes(group_elements, mul_func):
