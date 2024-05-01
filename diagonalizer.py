@@ -1140,6 +1140,9 @@ def Eigenbasis(N: int):
 # main
 def main():
 
+    basis = generate_simple_basis(4)
+    sort_basis(basis)
+    print(prepare_sorted_basis(basis))
     #Initialize and print the spin system for demonstration purposes
     #one_two_three_spin_test()
     
@@ -1150,7 +1153,7 @@ def main():
     #test_operators()
     
     #hammiltonian_test(10, print_matrices=False)
-    diagonalization_test(8, "Heisenberg_N8_spectrum.pdf")
+    #diagonalization_test(8, "Heisenberg_N8_spectrum.pdf")
     #Majumdar_Gosh_test(8, "Majumdar_Gosh_N8_spectrum.pdf")
     #Mujamdar_Gosh_splitting(8, 41, fname="Second_nn_splitting.pdf")
     #Mujamdar_Gosh_Symmetry_investigation(8)

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from itertools import product
 import numpy as np
 import seaborn as sns
-
+from matplotlib.colors import ListedColormap
 
 
 
@@ -197,7 +197,7 @@ def plot_omega_matrix(omega_matrix, figname = None):
     """
     sns.set()
     plt.figure(figsize=(8, 6))
-    sns.heatmap(omega_matrix, cmap="coolwarm", annot=True, fmt="d", linewidths=.5, square=True, cbar=False)
+    sns.heatmap(omega_matrix, cmap="Greys", annot=True, fmt="d", linewidths=.5, square=True, cbar=False)
     plt.xlabel("Group Elements (g)")
     plt.ylabel("Group Elements (h)")
     plt.title("Omega Matrix")
@@ -205,44 +205,50 @@ def plot_omega_matrix(omega_matrix, figname = None):
         plt.savefig(figname)
     plt.show()
 
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.colors import ListedColormap
 
-def plot_mul_table(mul_table, figname = None):
+def plot_mul_table(mul_table, figname=None):
     """
     Visualize the multiplication table of a group with boolean array elements.
     
-    The function plots each element of the multiplication table, adjusting the color based on the sign bit of each element. Elements with a sign bit of 1 are plotted in blue, while those with a sign bit of 0 are in red. The numerical values (ignoring the sign bit) are displayed in the corresponding cells.
+    Adjusts the color based on the sign bit of each element:
+    - Elements with a sign bit of 1 are plotted in blue.
+    - Elements with a sign bit of 0 are in red.
+    The numerical values (ignoring the sign bit) are displayed in the corresponding cells.
     
     Args:
-    - mul_table (np.ndarray): A numpy array representing the group's multiplication table, where each element is a boolean array.
-    
-    This visualization helps in understanding the structure and operation of the group, especially highlighting the distribution of positive and negative elements if interpreted in a signed context.
+    - mul_table (np.ndarray): A numpy array representing the group's multiplication table.
     """
-    
     num_elements = mul_table.shape[0]
-    sns.set()
-    fig, ax = plt.subplots(figsize=(10, 8))  # Adjust the figure size as needed
-    ax.imshow(np.zeros((num_elements, num_elements)), cmap="coolwarm", vmin=-1, vmax=1, extent=[0, num_elements, num_elements, 0])
+    display_matrix = np.zeros((num_elements, num_elements), dtype=int)
+    color_matrix = np.zeros((num_elements, num_elements), dtype=float)  # Use float for color scaling
 
+    # Prepare display matrix and color matrix
     for i in range(num_elements):
         for j in range(num_elements):
-            value = mul_table[i, j][1:]
             sign_bit = mul_table[i, j][0]
-            label = bool_array_to_int(value, is_signed=False)
-            color = 'blue' if sign_bit == 1 else 'red'  # Adjust color mapping
-            ax.text(j + 0.5, num_elements - i - 0.5, str(label), ha='center', va='center', color=color, fontsize=8)  # Adjust fontsize
+            value = bool_array_to_int(mul_table[i, j], is_signed=True)
+            display_matrix[i, j] = abs(value)
+            color_matrix[i, j] = -1 if sign_bit == 1 else 1  # -1 for blue, 1 for red
 
-    ax.set_xticks(np.arange(0, num_elements, 1))
-    ax.set_yticks(np.arange(0, num_elements, 1))
-    ax.set_yticklabels(list(map(lambda x: str(num_elements-1-x), range(num_elements))), fontsize=8)  # Reverse y-axis labels
-    ax.invert_yaxis()  # Invert the y-axis
-    ax.grid(color='black', linewidth=0.5)
+    # Create a custom colormap
+    cmap = ListedColormap(['gray', 'white'])
+
+    sns.set()
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(color_matrix, annot=display_matrix, fmt="d", cmap=cmap, cbar=False,
+                linewidths=0.5, linecolor='black', square=True)
     plt.xlabel("Group Elements (g)")
     plt.ylabel("Group Elements (h)")
     plt.title("Multiplication Table")
-    if figname != None:
-        plt.savefig(figname)
 
+    if figname:
+        plt.savefig(figname)
     plt.show()
+
 
 def generate_conjugacy_classes(group_elements, mul_func):
     """
@@ -299,12 +305,12 @@ def main():
     group_elements = generate_group_elements(4)
     mul_table = generate_mul_table(group_elements, simple_multiplication)
     omega_matrix = calculate_omega(group_elements)
-    plot_omega_matrix(omega_matrix)
+    plot_omega_matrix(omega_matrix, "Omega_matrix.pdf")
 
     covering_group = generate_group_elements(5)
     covering_mul_table = generate_mul_table(covering_group, covering_multiplication)
 
-    plot_mul_table(covering_mul_table)
+    plot_mul_table(covering_mul_table, "UV-mul-table.pdf")
     conjugacy_classes = generate_conjugacy_classes(covering_group, covering_multiplication)
 
     for cc in conjugacy_classes:
@@ -320,7 +326,7 @@ def main():
     small_covering_group = generate_group_elements(3)
     covering_mul_table = generate_mul_table(small_covering_group, small_covering_multiplication)
 
-    plot_mul_table(covering_mul_table)
+    plot_mul_table(covering_mul_table, "covering_mul_table.pdf")
     conjugacy_classes = generate_conjugacy_classes(small_covering_group, small_covering_multiplication)
 
     for cc in conjugacy_classes:

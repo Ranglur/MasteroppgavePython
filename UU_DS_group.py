@@ -17,18 +17,39 @@ def generate_UU_group():
 
     return group
 
-group = generate_UU_group()
+def generate_UU_reduced_Group():
+    group = np.zeros((16,3))
+    index = 0
+    for i in range(2):
+        for j in range(4):
+            for k in range(2):
+                group[index] = np.array([i,j,k], dtype = int)
+                index += 1
 
-
+    return group
 
 def UU_multiplication(elem1, elem2):
     elem3 = elem1 + elem2
     elem3[0] += elem1[2]*elem2[1]
     return elem3 % 4
 
+def UU_reduced_multiplication(elem1, elem2):
+    elem3 = np.zeros_like(elem1)
+    elem3[0] = (elem1[0] + elem2[0] + elem1[2]*elem2[1])%2    
+    elem3[1] = (elem1[1] + elem2[1])%4
+    elem3[2] = (elem1[2] + elem2[2])%2
+    return elem3
+
 def UU_inverse(elem, mulfunction):
     elem2 = elem
     for i in range(6):
+        elem2 = mulfunction(elem,elem2)
+
+    return elem2
+
+def UU_reduced_inverse(elem, mulfunction):
+    elem2 = elem
+    for i in range(2):
         elem2 = mulfunction(elem,elem2)
 
     return elem2
@@ -84,15 +105,15 @@ def generate_conjugacy_classes(group_elements, mul_func, inv_func):
 
     return conjugacy_classes
 
-def UU_commutator(elem1, elem2, mul_func):
+def get_commutator(elem1, elem2, mul_func, inv_func):
     """
     Compute the commutator of two elements.
     """
-    inv_elem1 = UU_inverse(elem1, mul_func)
-    inv_elem2 = UU_inverse(elem2, mul_func)
+    inv_elem1 = inv_func(elem1, mul_func)
+    inv_elem2 = inv_func(elem2, mul_func)
     return mul_func(mul_func(inv_elem1, mul_func(inv_elem2, mul_func(elem1, elem2))), np.array([0,0,0]))
 
-def generate_derived_subgroup(group_elements, mul_func):
+def generate_derived_subgroup(group_elements, mul_func, inv_func):
     """
     Generate the derived subgroup of a group given its elements and a multiplication function.
     """
@@ -100,7 +121,7 @@ def generate_derived_subgroup(group_elements, mul_func):
 
     for elem1 in group_elements:
         for elem2 in group_elements:
-            commutator = UU_commutator(elem1, elem2, mul_func)
+            commutator = get_commutator(elem1, elem2, mul_func,inv_func)
             # Add the commutator if it's not already in the list
             if not any(np.array_equal(commutator, com) for com in commutators):
                 commutators.append(commutator)
@@ -140,29 +161,34 @@ def generate_subgroups(group, group_2_idx_func, mul_func):
 
 
 
+def main():
+    print("UU-group:\n----------------------------------")
+    group = generate_UU_group()
+    derived_subgroup = generate_derived_subgroup(group, UU_multiplication, UU_inverse)
 
-derived_subgroup = generate_derived_subgroup(group, UU_multiplication)
-print("Derived Subgroup Size:", len(derived_subgroup))
-print(derived_subgroup)
+    print("Derived Subgroup Size:", len(derived_subgroup))
+    print(derived_subgroup)
 
-elem1 = np.array([0,1,2])
-elem2 = np.array([2, 3 ,2])
-
-print(UU_multiplication(elem1, elem2))
-print(UU_inverse(elem1, UU_multiplication))
-
-group = generate_UU_group()
-
-CCs = generate_conjugacy_classes(group, UU_multiplication, UU_inverse)
-print(len(CCs))
-
-for cc in CCs:
-    print(cc)
-
-orders = exponents_forall_elements(group, UU_multiplication)
-uneque_orders, counts = np.unique(orders, return_counts = True)
-order_counts = dict(zip(uneque_orders, counts))
-print(order_counts)
+    CCs = generate_conjugacy_classes(group, UU_multiplication, UU_inverse)
+    print(len(CCs))
 
 
 
+    orders = exponents_forall_elements(group, UU_multiplication)
+    uneque_orders, counts = np.unique(orders, return_counts = True)
+    order_counts = dict(zip(uneque_orders, counts))
+    print(order_counts)
+
+    print("UU-reduced group:\n----------------------------------")
+    group = generate_UU_reduced_Group()
+    CCs = generate_conjugacy_classes(group, UU_reduced_multiplication, UU_reduced_inverse)
+    print(len(CCs))
+    orders = exponents_forall_elements(group, UU_reduced_multiplication)
+    uneque_orders, counts = np.unique(orders, return_counts = True)
+    order_counts = dict(zip(uneque_orders, counts))
+    print(order_counts)
+
+
+
+if __name__ == '__main__':
+    main()
