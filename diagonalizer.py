@@ -583,58 +583,6 @@ def initialize_hammiltonian_matrix(N: int) -> dict:
     return H
 
 
-# def generate_hammiltonian_matrix(N: int, S_Sz_basis, H_operator):
-#     """
-#     Generate the Hamiltonian matrix representation in the given S, Sz basis.
-
-#     This function constructs the Hamiltonian matrix for a quantum spin system using 
-#     the given S, Sz basis. The Hamiltonian operator is provided as an argument and 
-#     is applied to each state to compute matrix elements. The matrix is constructed 
-#     in the S, Sz basis, making it block-diagonal.
-
-#     Parameters:
-#     - N (int): The number of spins in the system.
-#     - S_Sz_basis (dict): A dictionary where keys are total spin S values and values 
-#                           are dictionaries with keys being Sz values and values being 
-#                           the associated states.
-#     - H_operator (function): A function representing the Hamiltonian operator. This 
-#                              function takes in a state and returns the state after 
-#                              the action of the Hamiltonian.
-
-#     Returns:
-#     - dict: A block-diagonal matrix representation of the Hamiltonian in the S, Sz basis. 
-#             The keys are total spin S values, and the values are dictionaries with keys 
-#             being Sz values and values being the associated matrix blocks.
-
-#     Example:
-#     >>> def H_op(state):
-#     ...     # Dummy Hamiltonian operator example
-#     ...     return state
-#     >>> basis = {0.5: {0.5: {...}, -0.5: {...}}, 1.5: {...}}
-#     >>> H_matrix = generate_hammiltonian_matrix(2, basis, H_op)
-#     """
-    
-#     # Initialize the hammiltonian matrix and basis
-#     H = initialize_hammiltonian_matrix(N)
-#     simple_basis = generate_simple_basis(N)
-#     simple_basis = sort_basis(simple_basis)
-#     simple_basis_int = prepare_sorted_basis(simple_basis)
-#     print("generation started")
-    
-#     # Itterate over the states
-#     for S, Sz_dict in S_Sz_basis.items():
-#         print(f"generating matrices for S = {S}")
-#         for Sz, value in Sz_dict.items():
-#             if Sz != "paths":  # Ignore the "paths" key
-#                 for j, state_j in value.items():
-                    
-#                     # calculate H|SSz:j>
-#                     transformed_state = H_operator(state_j, S, Sz, N, simple_basis, simple_basis_int)
-#                     for i, state_i in value.items():
-#                         # calculate H_{ij}^{S,Sz} = <SSz;i|H|SSz;j>
-#                         H[S][Sz][i][j] = np.dot(state_i, transformed_state)
-                    
-#     return H
 
 def compute_H_for_Sz(N, S, Sz, value, H_operator, simple_basis, simple_basis_int, H):
     """
@@ -681,8 +629,11 @@ def generate_hammiltonian_matrix(N, S_Sz_basis, H_operator):
             H[S][Sz] = matrix_block
 
     return H
+
     
-    
+
+
+
 def print_hammiltonian_matrix(M: dict):
     """Prints the matrices in a hammiltonian_matrix dictionary
 
@@ -1154,7 +1105,7 @@ def main():
     
     #hammiltonian_test(10, print_matrices=False)
     #diagonalization_test(8, "Heisenberg_N8_spectrum.pdf")
-    #Majumdar_Gosh_test(8, "Majumdar_Gosh_N8_spectrum.pdf")
+    Majumdar_Gosh_test(8, "Majumdar_Gosh_N8_spectrum.pdf")
     #Mujamdar_Gosh_splitting(8, 41, fname="Second_nn_splitting.pdf")
     #Mujamdar_Gosh_Symmetry_investigation(8)
     #Eigenbasis(8)
