@@ -7,6 +7,7 @@ from functools import lru_cache
 from bisect import bisect_left
 import concurrent.futures
 import matplotlib.pyplot as plt
+import time
 
 # Simple basis functions:
 # ------------------------------------------------------------------------
@@ -283,8 +284,6 @@ def get_paths(N: int) -> np.ndarray:
     return paths
     
 
-# TODO: fix initialize function such that all i-s are initialized simulatiously. At the moment this runs N-times instead of just once
-
 def initialize_spin_system(N: int) -> dict:
     """Initializes dict wich will contain the coefficients of a N-spin system. Every coefficient array is initialized as zero array.
     Also puts every valid path into the dict 
@@ -316,12 +315,8 @@ def initialize_spin_system(N: int) -> dict:
 
         path_start += path_dim
         for Sz in Sz_values:
-            spin_system[S][Sz] = {}
-            i_dim = get_i_dim(N, S)
-            c_array_dim = get_c_array_dim(N, Sz)
-
-            for i in range(i_dim):
-                spin_system[S][Sz][i] = np.zeros(c_array_dim)
+            spin_system[S][Sz] = np.zeros(shape=(get_i_dim(N, S),get_c_array_dim(N, Sz)))
+            
 
     
     
@@ -336,7 +331,7 @@ def print_spin_system(spin_system: dict):
     for S, Sz_dict in spin_system.items():
         for Sz, value in Sz_dict.items():
             if Sz != "paths":  # Ignore the "paths" key
-                for i, c_array in value.items():
+                for i, c_array in enumerate(value):
                     print(f"|S={S}, Sz={Sz}; i={i}>", c_array)
 
 def initialize_one_spin_system():
@@ -389,7 +384,7 @@ def add_spin_to_system(spin_system):
     for S, Sz_dict in spin_system.items():
         # Looping over Sz values excluding "paths"
         for Sz in [key for key in Sz_dict.keys() if key != "paths"]:
-            for i, coefficients in Sz_dict[Sz].items():
+            for i, coefficients in enumerate(Sz_dict[Sz]):
                 for new_S in [S - 0.5, S + 0.5]:  # Possible new total spin values
                     if new_S < 0:
                         continue
@@ -446,6 +441,7 @@ def add_spin_to_system(spin_system):
                             contribution = float(cg_coeff) * coeff
                             new_spin_system[new_S][new_Sz][new_i][new_c_array_index] += contribution
             
+    print(f"{N}-spin basis created")
     return new_spin_system
 
 def get_spin_system(N: int) -> dict:
@@ -461,10 +457,67 @@ def get_spin_system(N: int) -> dict:
     system = initialize_one_spin_system()
     
     for n in range(N-1):
+        start_time = time.time()
         system = add_spin_to_system(system)
-    
+        end_time = time.time()
+
+        elapsed_time = end_time - start_time
+        print(f"The function took {elapsed_time} seconds to complete.")
     
     return system
+
+
+# Save the spinbasis:
+
+def save_spin_basis(spin_system, filename):
+    """
+    Saves the spin system data to a file.
+
+    Args:
+        spin_system (dict): The spin system to save.
+        filename (str): The name of the file where data will be saved.
+    """
+    # Temporary dictionary to store arrays
+    np_arrays = {}
+    
+    for S, Sz_dict in spin_system.items():
+        if "paths" in Sz_dict:
+            # Save the paths array under a unique key
+            np_arrays[f'{S}_paths'] = Sz_dict["paths"]
+        for Sz, array in Sz_dict.items():
+            if isinstance(Sz, float):  # Check to store only arrays
+                np_arrays[f'{S}_{Sz}'] = array
+
+    # Save all arrays to a single compressed .npz file
+    np.savez_compressed(filename, **np_arrays)
+    print(f"Data saved to {filename}") 
+
+def load_spin_basis(filename):
+    """
+    Loads the spin system data from a file.
+
+    Args:
+        filename (str): The name of the file from which data will be loaded.
+
+    Returns:
+        dict: The reconstructed spin system.
+    """
+    data = np.load(filename, allow_pickle=True)
+    spin_system = {}
+
+    for key in data:
+        S, prop = key.split('_')
+        S = float(S)
+        if S not in spin_system:
+            spin_system[S] = {}
+        
+        if prop == 'paths':
+            spin_system[S]['paths'] = data[key]
+        else:
+            Sz = float(prop)
+            spin_system[S][Sz] = data[key]
+
+    return spin_system
 
 
 # Operators:
@@ -599,9 +652,9 @@ def compute_H_for_Sz(N, S, Sz, value, H_operator, simple_basis, simple_basis_int
     - Tuple (S, Sz, matrix_block): The S, Sz values and the computed matrix block.
     """
     matrix_block = np.zeros_like(H[S][Sz])
-    for j, state_j in value.items():
+    for j, state_j in enumerate(value):
         transformed_state = H_operator(state_j, S, Sz, N, simple_basis, simple_basis_int)
-        for i, state_i in value.items():
+        for i, state_i in enumerate(value):
             matrix_block[i][j] = np.dot(state_i, transformed_state)
     return S, Sz, matrix_block
 
@@ -612,27 +665,40 @@ def generate_hammiltonian_matrix(N, S_Sz_basis, H_operator):
     simple_basis = sort_basis(simple_basis)
     simple_basis_int = prepare_sorted_basis(simple_basis)
     print("Generation started")
+    Sz_values = np.arange(-N/2, N/2 + 1, 1)
 
-    # ThreadPoolExecutor for parallel computation
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = []
-        for S, Sz_dict in S_Sz_basis.items():
-            print(f"Generating matrices for S = {S}")
-            for Sz, value in Sz_dict.items():
-                if Sz != "paths":  # Ignore the "paths" key
-                    # Submit a job to the thread pool for each Sz
-                    futures.append(executor.submit(compute_H_for_Sz, N, S, Sz, value, H_operator, simple_basis, simple_basis_int, H))
 
-        # Retrieve results and populate H
-        for future in futures:
-            S, Sz, matrix_block = future.result()
-            H[S][Sz] = matrix_block
+    for S_z in Sz_values:
+        print(f"Generating matrices for Sz = {S_z}")
+        H_Sz_basis = H_operator(S_z, N, simple_basis, simple_basis_int)
+        S_values = np.arange(np.abs(S_z), N/2 + 1, 1)
+        for S in S_values:
+            if S<np.abs(S_z):
+                continue
+            block = S_Sz_basis[S][S_z]
+            H[S][S_z] = block@H_Sz_basis@np.transpose(block)
 
     return H
 
     
 
+def add_H_matrices(H_1,H_2):
+    H_3 = {}
+    for S, Sz_dict in H_2.items():
+        H_3[S] = {}
+        for Sz, matrix in Sz_dict.items():
+            H_3[S][Sz] = H_1[S][Sz] + H_2[S][Sz]
 
+    return H_3
+
+def scalar_mul_H_matrices(c,H):
+    H_new = {}
+    for S, Sz_dict in H.items():
+        H_new[S] = {}
+        for Sz, matrix in Sz_dict.items():
+            H_new[S][Sz] = c*matrix
+
+    return H_new
 
 def print_hammiltonian_matrix(M: dict):
     """Prints the matrices in a hammiltonian_matrix dictionary
@@ -648,12 +714,10 @@ def print_hammiltonian_matrix(M: dict):
     
 # Hammiltonian operators:
 
-def H_heisenberg_chain(state: np.ndarray, S: float, Sz: float, N: int, simple_basis: np.ndarray, simple_basis_int: np.ndarray, J = 1) -> np.ndarray:
+def H_heisenberg_chain(Sz: float, N: int, simple_basis: np.ndarray, simple_basis_int: np.ndarray) -> np.ndarray:
     """Hammiltonian operator for heisenberg N-chain acting on a state in the S, Sz basis and returning the transformed state. 
 
     Args:
-        state (np.ndarray): input state
-        S (float): total spin for the state
         Sz (float): total spin in z-direction for the state
         N (int): number of spins
         simple_basis (np.ndarray): the simple basis
@@ -661,69 +725,62 @@ def H_heisenberg_chain(state: np.ndarray, S: float, Sz: float, N: int, simple_ba
         J (int, optional): coupling constant. Defaults to 1.
 
     Returns:
-        np.ndarray: the transformed state
+        np.ndarray: the H matrix in the |S_z;i> basis
     """
-    transformed_state = np.zeros_like(state)
+    degen_z = get_c_array_dim(N,Sz)
+    H_matrix = np.zeros(shape=(degen_z,degen_z))
     calculated_M = M(N, Sz)
-    for k, c in enumerate(state):
+    for k in range(degen_z):
         for i in range(N):
             
             # Sz_iS_zj, modN to enforce periodic boundary:
-            transformed_state[k] += c*apply_Sz_operator(i, simple_basis[k + calculated_M])*apply_Sz_operator((i + 1)%N, simple_basis[k + calculated_M])
+            H_matrix[k][k] += apply_Sz_operator(i, simple_basis[k + calculated_M])*apply_Sz_operator((i + 1)%N, simple_basis[k + calculated_M])
             
                         
             idx = apply_double_ladder_operator(i, (i+1)%N, Sz, simple_basis[k + calculated_M], simple_basis_int)
             if idx == None:
                 continue
             
-            transformed_state[idx] += c/2
+            H_matrix[k][idx] += 1/2
             
 
     
-    return transformed_state*J
+    return H_matrix
 
 
 
-def H_heisenberg_Majumdar_Gosh(state: np.ndarray, S: float, Sz: float, N: int, simple_basis: np.ndarray, simple_basis_int: np.ndarray, J = 1, ratio = 0.5) -> np.ndarray:
+def H_second_nearest(Sz: float, N: int, simple_basis: np.ndarray, simple_basis_int: np.ndarray) -> np.ndarray:
     """Mujamdar-Gosh hammiltonian operator acting on a state in the S, Sz basis and returning the transformed state.
 
     Args:
-        state (np.ndarray): input state
-        S (float): total spin for the state
         Sz (float): total spin in z-direction for the state
         N (int): number of spins
         simple_basis (np.ndarray): the simple basis
         simple_basis_int (np.ndarray): the integer version of the simple basis
         J (int, optional): coupling constant for NN interaction. Defaults to 1.        
-        ratio (float, optional): ratio of coupling constant for second NN interaction wrt NN interaction. Defaults to 0.5.
-
     Returns:
         np.ndarray: the transformed state
     """
-    transformed_state = np.zeros_like(state)
+    degen_z = get_c_array_dim(N,Sz)
+    H_matrix = np.zeros(shape=(degen_z,degen_z))
     calculated_M = M(N, Sz)
-    for k, c in enumerate(state):
+    for k in range(degen_z):
         for i in range(N):
             
-            # Sz_iS_zi+1:
-            transformed_state[k] += c*apply_Sz_operator(i, simple_basis[k + calculated_M])*apply_Sz_operator((i + 1)%N, simple_basis[k + calculated_M])
+            # Sz_iS_zj, modN to enforce periodic boundary:
+            H_matrix[k][k] += apply_Sz_operator(i, simple_basis[k + calculated_M])*apply_Sz_operator((i + 2)%N, simple_basis[k + calculated_M])
             
-            # Sz_iS_zi+2:
-            transformed_state[k] += ratio*c*apply_Sz_operator(i, simple_basis[k + calculated_M])*apply_Sz_operator((i + 2)%N, simple_basis[k + calculated_M])
                         
-            idx1 = apply_double_ladder_operator(i, (i+1)%N, Sz, simple_basis[k + calculated_M], simple_basis_int)
-            idx2 = apply_double_ladder_operator(i, (i+2)%N, Sz, simple_basis[k + calculated_M], simple_basis_int)
+            idx = apply_double_ladder_operator(i, (i+2)%N, Sz, simple_basis[k + calculated_M], simple_basis_int)
+            if idx == None:
+                continue
             
-            if idx1 != None:
-                transformed_state[idx1] += c/2
-            
-            if idx2 != None:
-                transformed_state[idx2] += ratio*c/2 
-            
+            H_matrix[k][idx] += 1/2
             
 
     
-    return transformed_state*J
+    return H_matrix
+
 
 
 
@@ -905,7 +962,7 @@ def normtest(spin_system, tolerance=1e-10):
     for S, Sz_dict in spin_system.items():
         for Sz, value in Sz_dict.items():
             if Sz != "paths":  # Ignore the "paths" key
-                for i, c_array in value.items():
+                for i, c_array in enumerate(value):
                     
                     norm = np.linalg.norm(c_array)
                     if np.abs(norm - 1) > tolerance:
@@ -928,6 +985,33 @@ def one_two_three_spin_test():
     normtest(three_spin_system)
     print_spin_system(three_spin_system)
 
+def test_save_and_load_spin_system():
+
+    # Create the spin system
+    N = 4  # Number of spins
+    original_spin_system = get_spin_system(N)  
+    
+    # Save the spin system to a file
+    filename = 'test_spin_system.npz'
+    save_spin_basis(original_spin_system, filename)
+    
+    # Load the spin system from the file
+    loaded_spin_system = load_spin_basis(filename)
+    
+    # Compare the original and loaded systems
+    for S, Sz_dict in original_spin_system.items():
+        if "paths" in Sz_dict:
+            if not np.array_equal(Sz_dict["paths"], loaded_spin_system[S]["paths"]):
+                print(f"Difference found in paths for S={S}")
+                return
+        for Sz, array in Sz_dict.items():
+            if isinstance(Sz, float):  # Make sure to compare only arrays
+                if not np.array_equal(array, loaded_spin_system[S][Sz]):
+                    print(f"Difference found in arrays for S={S}, Sz={Sz}")
+                    return
+    
+    print("Original and loaded spin systems are identical.")
+
 def test_operators():
     sb = generate_simple_basis(2)
     sb = sort_basis(sb)
@@ -948,34 +1032,33 @@ def hammiltonian_test(N: int, print_matrices = False):
     if print_matrices:
         print_hammiltonian_matrix(H)
 
-def diagonalization_test(N: int, fname = None):
-    basis = get_spin_system(N)
+def diagonalization_test(basis, N: int, fname = None):
     H = generate_hammiltonian_matrix(N, basis, H_heisenberg_chain)
-    spectrum, eigenbasis = fulldiag(H, N, basis, return_eigenbasis=True)    
+    spectrum = fulldiag(H, N, basis, return_eigenbasis=False)    
     plot_spectrum(spectrum, filename = fname)
-    print(eigenbasis[0][0][0])
     
     
-def Majumdar_Gosh_test(N: int, fname = None):
-    basis = get_spin_system(N)
-    H = generate_hammiltonian_matrix(N, basis, H_heisenberg_Majumdar_Gosh)
+    
+def Majumdar_Gosh_test(basis, N: int, fname = None):
+    H_1 = generate_hammiltonian_matrix(N, basis, H_heisenberg_chain)
+    H_2 = generate_hammiltonian_matrix(N, basis, H_second_nearest)
+    H = add_H_matrices(H_1,scalar_mul_H_matrices(0.5,H_2))
     spectrum, eigenbasis = fulldiag(H, N, basis, return_eigenbasis=True)    
     plot_spectrum(spectrum, filename = fname)
+    print(spectrum)
 
-def Mujamdar_Gosh_splitting(N: int, M:int, fname = None):
-    
-    basis = get_spin_system(N)
+def Mujamdar_Gosh_splitting(basis, N: int, M:int, fname = None):
     ratios = np.linspace(0,1,num=M)
     splitting = np.zeros(M)
+    H_1 = generate_hammiltonian_matrix(N, basis, H_heisenberg_chain)
+    H_2 = generate_hammiltonian_matrix(N, basis, H_second_nearest)
     for i, ratio in enumerate(ratios):
-        def H_heisenberg_Helper(state: np.ndarray, S: float, Sz: float, N: int, simple_basis, simple_basis_int, J = 1):
-            return H_heisenberg_Majumdar_Gosh(state, S, Sz, N, simple_basis, simple_basis_int, J , ratio = ratio)        
-
-        H = generate_hammiltonian_matrix(N, basis, H_heisenberg_Helper)
-        spectrum, eigenbasis = fulldiag(H, N, basis, return_eigenbasis=True)
+        H = add_H_matrices(H_1,scalar_mul_H_matrices(ratio,H_2))
+        print(i)
+        spectrum = fulldiag(H, N, basis, return_eigenbasis=False)
         fullspectrum = get_fullspectrum_sorted(spectrum)
         splitting[i] = fullspectrum[1] - fullspectrum[0] 
-        #splitting[i] = spectrum[0][0][1] - spectrum[0][0][0]
+        
         
     print(splitting)
     plt.plot(ratios, splitting)
@@ -987,15 +1070,14 @@ def Mujamdar_Gosh_splitting(N: int, M:int, fname = None):
     plt.show()
 
 
-def Mujamdar_Gosh_Symmetry_investigation(N: int, fname = None):
+def Mujamdar_Gosh_Symmetry_investigation(basis ,N: int, fname = None):
     basis = get_spin_system(N)
-    J_primes = [0.5, 0.52]
+    ratios = [0.5, 0.52]
 
-    for J_prime in J_primes:
-        def H_heisenberg(state: np.ndarray, S: float, Sz: float, N: int, simple_basis: np.ndarray, simple_basis_int: np.ndarray, J = 1):
-            return H_heisenberg_Majumdar_Gosh(state, S, Sz, N, simple_basis, simple_basis_int, J = 1, ratio = J_prime)
-        
-        H = generate_hammiltonian_matrix(N, basis, H_heisenberg)
+    for ratio in ratios:
+        H_1 = generate_hammiltonian_matrix(N, basis, H_heisenberg_chain)
+        H_2 = generate_hammiltonian_matrix(N, basis, H_second_nearest)
+        H = add_H_matrices(H_1,scalar_mul_H_matrices(ratio,H_2))
         spectrum, eigenbasis = fulldiag(H, N, basis, return_eigenbasis=True)
         fullspectrum = get_fullspectrum_sorted(spectrum)
         
@@ -1018,9 +1100,9 @@ def Mujamdar_Gosh_Symmetry_investigation(N: int, fname = None):
 
 
 
-def MJ_splitting(N: int, n: int, pointsize: float , fname: str):
-    # Sets up the |S,Sz,i> spinbasis
-    basis = get_spin_system(N)
+def MJ_splitting(basis, N: int, n: int, pointsize: float , fname: str):
+    
+    
     ratios = np.linspace(0.5,0.6,num=n)
 
     # Dictionary to store spectra for each S and full spectrum
@@ -1030,11 +1112,9 @@ def MJ_splitting(N: int, n: int, pointsize: float , fname: str):
     # Loops through the different values for the second nearest neigbour interaction strength
     for i, ratio in enumerate(ratios):
         # Sets up the helper function
-        def H_heisenberg_Helper(state: np.ndarray, S: float, Sz: float, N: int, simple_basis, simple_basis_int, J = 1):
-            return H_heisenberg_Majumdar_Gosh(state, S, Sz, N, simple_basis, simple_basis_int, J , ratio = ratio)        
-
-        # Generates the block diagonal hammiltonian matrix using the hammiltonian operator above
-        H = generate_hammiltonian_matrix(N, basis, H_heisenberg_Helper)
+        H_1 = generate_hammiltonian_matrix(N, basis, H_heisenberg_chain)
+        H_2 = generate_hammiltonian_matrix(N, basis, H_second_nearest)
+        H = add_H_matrices(H_1,scalar_mul_H_matrices(ratio,H_2))
         #Diagonalizes the spectrum
         spectrum, eigenbasis = fulldiag(H, N, basis, return_eigenbasis=True)
         
@@ -1079,9 +1159,11 @@ def MJ_splitting(N: int, n: int, pointsize: float , fname: str):
    
 
 
-def Eigenbasis(N: int):
+def Eigenbasis(basis, N: int):
     basis = get_spin_system(N)
-    H = generate_hammiltonian_matrix(N, basis, H_heisenberg_Majumdar_Gosh)
+    H_1 = generate_hammiltonian_matrix(N, basis, H_heisenberg_chain)
+    H_2 = generate_hammiltonian_matrix(N, basis, H_second_nearest)
+    H = add_H_matrices(H_1,scalar_mul_H_matrices(0.5,H_2))
     spectrum, eigenbasis = fulldiag(H, N, basis, return_eigenbasis=True)
     
     
@@ -1090,38 +1172,27 @@ def Eigenbasis(N: int):
     
 # main
 def main():
-
-    basis = generate_simple_basis(4)
-    sort_basis(basis)
-    print(prepare_sorted_basis(basis))
     #Initialize and print the spin system for demonstration purposes
     #one_two_three_spin_test()
-    
+    #test_save_and_load_spin_system()
     #Create a larger spinbasis as a test
-    #spin_system = get_spin_system(10)
+
+    
+
     #normtest(spin_system)
 
     #test_operators()
-    
-    #hammiltonian_test(10, print_matrices=False)
-    #diagonalization_test(8, "Heisenberg_N8_spectrum.pdf")
-    Majumdar_Gosh_test(8, "Majumdar_Gosh_N8_spectrum.pdf")
-    #Mujamdar_Gosh_splitting(8, 41, fname="Second_nn_splitting.pdf")
-    #Mujamdar_Gosh_Symmetry_investigation(8)
-    #Eigenbasis(8)
+    #spin_system = get_spin_system(12)
+    #save_spin_basis(spin_system,'12_spin_system.npz' )
+    spin_system = load_spin_basis('14_spin_system.npz')
+    #hammiltonian_test(12, print_matrices=False)
+    #diagonalization_test(spin_system, 12, "Heisenberg_N12_spectrum.pdf")
+    #Majumdar_Gosh_test(spin_system, 12, "Majumdar_Gosh_N12_spectrum.pdf")
+    Mujamdar_Gosh_splitting(spin_system, 14, 41, fname="Second_nn_splitting.pdf")
+    #Mujamdar_Gosh_Symmetry_investigation(spin_system, 8)
+    #Eigenbasis(spin_system, 8)
 
-    #MJ_splitting(8,120,4,"spectrum_splitting.pdf")
-
-
-    #Diagonalizing the system
-    # N = 8
-    # simple_basis = generate_simple_basis(N)
-    # simple_basis = sort_basis(simple_basis)
-    # simple_basis_int = prepare_sorted_basis(simple_basis)
-    # simple_state = np.array([False,True,False,True,False,True,False,True],dtype=bool)
-    # idx = binary_search_in_block(simple_basis_int, 0, simple_state)
-    # print(idx)
-
+    #MJ_splitting(8,300,4,"spectrum_splitting.pdf")
 
     return 0
 
