@@ -3,8 +3,10 @@ import numpy as np
 from itertools import combinations
 import numpy as np
 from tqdm import tqdm 
-
-
+import seaborn as sns
+from matplotlib.colors import ListedColormap, BoundaryNorm
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 def generate_UU_group():
     group = np.zeros((64,3))
@@ -159,6 +161,119 @@ def generate_subgroups(group, group_2_idx_func, mul_func):
 
 
 
+def generate_mul_table(group_elements, mul_func):
+    """
+    Generate a multiplication table for a group given its elements and a multiplication function.
+    
+    Args:
+    - group_elements (list): A list of the group's elements, represented as numpy arrays.
+    - mul_func (function): A function that defines the multiplication operation between two elements of the group.
+    
+    Returns:
+    - np.ndarray: A square numpy array representing the group's multiplication table. Each cell [i, j] contains the result of mul_func(group_elements[i], group_elements[j]).
+    """
+    # Determine the number of elements in the group.
+    num_elements = len(group_elements)
+    
+    # Initialize an empty numpy array to store the multiplication table.
+    mul_table = np.empty((num_elements, num_elements), dtype=object)
+
+    # Populate the multiplication table by applying the multiplication function to each pair of elements.
+    for i, a in enumerate(group_elements):
+        for j, b in enumerate(group_elements):
+            result = mul_func(a, b)  # Perform multiplication operation.
+            mul_table[i, j] = result  # Store the result in the table.
+
+    return mul_table
+
+
+
+def plot_mul_table_DS(mul_table, figname=None):
+    """
+    Visualize the multiplication table of a group with boolean array elements.
+    
+    Adjusts the color based on the values of each element:
+    - Different values are plotted with different colors.
+    The numerical values are displayed in the corresponding cells.
+    
+    Args:
+    - mul_table (np.ndarray): A numpy array representing the group's multiplication table.
+    """
+    num_elements = 16
+    display_matrix = np.zeros((num_elements, num_elements), dtype=int)
+    color_matrix = np.zeros((num_elements, num_elements), dtype=int)  # Use int for color indices
+
+    # Prepare display matrix and color matrix
+    for i in range(num_elements):
+        for j in range(num_elements):
+            display_matrix[i, j] = abs(4 * mul_table[i, j][1] + mul_table[i, j][2])
+            color_matrix[i, j] = mul_table[i, j][0]  # 0, 1, 2, or 3
+
+    # Create a custom colormap with white, light gray, dark gray, and black
+    cmap = ListedColormap(['white', 'lightgray', 'darkgray', 'black'])
+    norm = BoundaryNorm([0, 1, 2, 3, 4], cmap.N)
+
+    sns.set()
+    plt.figure(figsize=(10, 8))
+    ax = sns.heatmap(color_matrix, annot=display_matrix, fmt="d", cmap=cmap, norm=norm, cbar=False,
+                     linewidths=0.5, linecolor='black', square=True)
+
+    # Create a custom legend
+    legend_elements = [
+        mpatches.Patch(facecolor='white', edgecolor='black', label='0 (i^0)'),
+        mpatches.Patch(facecolor='lightgray', edgecolor='black', label='1 (i^1)'),
+        mpatches.Patch(facecolor='dimgray', edgecolor='black', label='2 (i^2)'),
+        mpatches.Patch(facecolor='black', edgecolor='black', label='3 (i^3)')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.20, 1))
+
+    plt.xlabel("Group Elements (g)")
+    plt.ylabel("Group Elements (h)")
+    plt.title("Multiplication Table")
+
+    if figname:
+        plt.savefig(figname)
+    plt.show()
+
+
+def plot_mul_table_DSL(mul_table, figname=None):
+    """
+    Visualize the multiplication table of a group with boolean array elements.
+    
+    Adjusts the color based on the sign bit of each element:
+    - Elements with a sign bit of 1 are plotted in blue.
+    - Elements with a sign bit of 0 are in red.
+    The numerical values (ignoring the sign bit) are displayed in the corresponding cells.
+    
+    Args:
+    - mul_table (np.ndarray): A numpy array representing the group's multiplication table.
+    """
+    num_elements = mul_table.shape[0]
+    display_matrix = np.zeros((num_elements, num_elements), dtype=int)
+    color_matrix = np.zeros((num_elements, num_elements), dtype=float)  # Use float for color scaling
+
+    # Prepare display matrix and color matrix
+    for i in range(num_elements):
+        for j in range(num_elements):
+            display_matrix[i, j] = 2*mul_table[i,j][1] + mul_table[i,j][2]
+            color_matrix[i, j] = mul_table[i,j][0]  # -1 for blue, 1 for red
+
+
+    # Create a custom colormap
+    cmap = ListedColormap(['white','gray'])
+
+    sns.set()
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(color_matrix, annot=display_matrix, fmt="d", cmap=cmap, cbar=False,
+                linewidths=0.5, linecolor='black', square=True)
+    plt.xlabel("Group Elements (g)")
+    plt.ylabel("Group Elements (h)")
+    plt.title("Multiplication Table")
+
+    if figname:
+        plt.savefig(figname)
+    plt.show()
+
 
 
 def main():
@@ -173,6 +288,8 @@ def main():
     print(len(CCs))
 
 
+    table = generate_mul_table(group, UU_multiplication)
+    plot_mul_table_DS(table,"UUmultable.pdf")
 
     orders = exponents_forall_elements(group, UU_multiplication)
     uneque_orders, counts = np.unique(orders, return_counts = True)
@@ -181,6 +298,8 @@ def main():
 
     print("UU-reduced group:\n----------------------------------")
     group = generate_UU_reduced_Group()
+    table = generate_mul_table(group, UU_reduced_multiplication)
+    plot_mul_table_DSL(table,"UUReducedmultable.pdf")
     CCs = generate_conjugacy_classes(group, UU_reduced_multiplication, UU_reduced_inverse)
     print(len(CCs))
     orders = exponents_forall_elements(group, UU_reduced_multiplication)

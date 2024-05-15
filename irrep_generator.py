@@ -623,7 +623,7 @@ class SpaceGroup:
 
                         # Calculate the conjugate space group element
                         new_sg_elem = SGTransformation(A_m, zero_translation, self.lattice.N_array)**(-1) * sg_element * SGTransformation(A_l, zero_translation, self.lattice.N_array)
-                        B = new_sg_elem.A  # Rotational part of the conjugate element
+                        B =   new_sg_elem.A  # Rotational part of the conjugate element
                         sigma = new_sg_elem.t  # Translational part of the conjugate element
 
                         # Calculate the phase factor and apply it to the irrep matrix
@@ -711,7 +711,7 @@ class IrrepData:
             for i in range(self.number_of_irreps):
                 # Print each row of characters, starting with Irrep 0 and its dimension
                 irrep_dimension = np.shape(self.irrep_matrices[i][0])[0]
-                row = [f"Irrep {i} ({irrep_dimension})"] + [str(character_table[i, j]) for j in range(character_table.shape[1])]
+                row = [f"Irrep {i} ({irrep_dimension})"] + [str(np.round(character_table[i, j], decimals = 3)) for j in range(character_table.shape[1])]
                 print("\t".join(row))
 
         return character_table
@@ -774,7 +774,7 @@ def test_generate_irreps(N):
 def main():
 # Example usage:
     #test_generate_cc()
-    N_array=np.array([8])
+    N_array=np.array([4])
     lattice = LatticeSite(N_array, basis=np.eye(1))
     E = np.eye(1)
     Pi = -np.eye(1)
@@ -785,11 +785,11 @@ def main():
  
     ct = irreps.generate_character_table(True)
     conjugacy_classes = irreps.conjugacy_classes
-    simple_state = np.array([False,True,False,True,False,True,False,True],dtype=bool)
-
     for conjugacy_class in conjugacy_classes:
-        transform: SGTransformation = conjugacy_class[0]
-        print(transform.operate_on_simple_state(simple_state))
+        print(conjugacy_class)
+
+
+
         
 
     #print(space_group.generate_conjugacy_classes())

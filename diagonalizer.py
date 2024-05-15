@@ -3,6 +3,7 @@ import numpy as np
 import itertools
 from sympy.physics.quantum.cg import CG
 from scipy.special import comb
+from scipy.linalg import eigh
 from functools import lru_cache
 from bisect import bisect_left
 import concurrent.futures
@@ -637,27 +638,6 @@ def initialize_hammiltonian_matrix(N: int) -> dict:
 
 
 
-def compute_H_for_Sz(N, S, Sz, value, H_operator, simple_basis, simple_basis_int, H):
-    """
-    Compute the Hamiltonian matrix block for a specific S and Sz.
-
-    Parameters:
-    - N, S, Sz: Quantum numbers for the system.
-    - value: The states associated with this S, Sz.
-    - H_operator: The Hamiltonian operator function.
-    - simple_basis, simple_basis_int: Basis information.
-    - H: The Hamiltonian matrix being populated.
-
-    Returns:
-    - Tuple (S, Sz, matrix_block): The S, Sz values and the computed matrix block.
-    """
-    matrix_block = np.zeros_like(H[S][Sz])
-    for j, state_j in enumerate(value):
-        transformed_state = H_operator(state_j, S, Sz, N, simple_basis, simple_basis_int)
-        for i, state_i in enumerate(value):
-            matrix_block[i][j] = np.dot(state_i, transformed_state)
-    return S, Sz, matrix_block
-
 def generate_hammiltonian_matrix(N, S_Sz_basis, H_operator):
     # Initialize the hammiltonian matrix and basis
     H = initialize_hammiltonian_matrix(N)
@@ -790,7 +770,7 @@ def H_second_nearest(Sz: float, N: int, simple_basis: np.ndarray, simple_basis_i
 # Helper function used for paralellization
 def diagonalize_block(args):
     S, Sz, block_matrix = args
-    eigvals, eigvecs = np.linalg.eigh(block_matrix)  # diagonalize the block
+    eigvals, eigvecs = eigh(block_matrix)  # diagonalize the block
     sorted_indices = np.argsort(eigvals)  # get sorted indices
 
     # Sort eigenvalues and eigenvectors
@@ -872,7 +852,7 @@ def plot_spectrum(spectrum: dict, filename = None):
                 x_vals.append(S)
                 y_vals.append(energy)
 
-    plt.scatter(x_vals, y_vals, c='blue', marker='o', edgecolors='black')
+    plt.scatter(x_vals, y_vals,s=5, c='blue', marker='o', edgecolors='black')
     plt.xlabel('S value')
     plt.ylabel('Energy [J]')
     plt.title('Spectrum Scatter Plot') 
@@ -1034,40 +1014,125 @@ def hammiltonian_test(N: int, print_matrices = False):
 
 def diagonalization_test(basis, N: int, fname = None):
     H = generate_hammiltonian_matrix(N, basis, H_heisenberg_chain)
-    spectrum = fulldiag(H, N, basis, return_eigenbasis=False)    
+    spectrum = fulldiag(H, N, basis)    
     plot_spectrum(spectrum, filename = fname)
+    fullspectrum = get_fullspectrum_sorted(spectrum)
+    print(fullspectrum)
+    
     
     
     
 def Majumdar_Gosh_test(basis, N: int, fname = None):
     H_1 = generate_hammiltonian_matrix(N, basis, H_heisenberg_chain)
     H_2 = generate_hammiltonian_matrix(N, basis, H_second_nearest)
-    H = add_H_matrices(H_1,scalar_mul_H_matrices(0.5,H_2))
+    H = add_H_matrices(H_1,scalar_mul_H_matrices(1/2,H_2))
     spectrum, eigenbasis = fulldiag(H, N, basis, return_eigenbasis=True)    
     plot_spectrum(spectrum, filename = fname)
-    print(spectrum)
+    fullspectrum = get_fullspectrum_sorted(spectrum)
+    print(eigenbasis[0][0][0])
+    print(np.round(eigenbasis[0][0][1], decimals = 5))
 
-def Mujamdar_Gosh_splitting(basis, N: int, M:int, fname = None):
-    ratios = np.linspace(0,1,num=M)
-    splitting = np.zeros(M)
+
+
+def Mujamdar_Gosh_splitting(basis, N: int, M: int, fname1=None):
+    # Enhanced resolution near the transition point
+    transition_ratio = 0.241
+    near_transition_range = np.linspace(transition_ratio - 0.01, transition_ratio + 0.01, 7)  # 6 points around the transition
+
+    # General range of ratios with enhanced range near the transition point
+    general_range = np.linspace(0, 1, M)
+    ratios = np.sort(np.unique(np.concatenate((general_range, near_transition_range))))  # Combine and sort the arrays, remove duplicates
+
+    Two_lowest_splitting = np.zeros(len(ratios))
+    Second_and_third_splitting = np.zeros(len(ratios))
+
     H_1 = generate_hammiltonian_matrix(N, basis, H_heisenberg_chain)
     H_2 = generate_hammiltonian_matrix(N, basis, H_second_nearest)
+
     for i, ratio in enumerate(ratios):
-        H = add_H_matrices(H_1,scalar_mul_H_matrices(ratio,H_2))
-        print(i)
+        H = add_H_matrices(H_1, scalar_mul_H_matrices(ratio, H_2))
         spectrum = fulldiag(H, N, basis, return_eigenbasis=False)
         fullspectrum = get_fullspectrum_sorted(spectrum)
-        splitting[i] = fullspectrum[1] - fullspectrum[0] 
-        
-        
-    print(splitting)
-    plt.plot(ratios, splitting)
-    plt.title("Splitting of two lowest ground state energies wrt the ratio J'/J")
+        print(f"Ratio {ratio}: Index {i}")
+
+        Two_lowest_splitting[i] = fullspectrum[1] - fullspectrum[0]
+        Second_and_third_splitting[i] = fullspectrum[2] - fullspectrum[1]
+
+    # Plotting
+    plt.figure(figsize=(10, 6))  # Set the figure size to ensure there is enough space
+    plt.plot(ratios, Two_lowest_splitting, label="Difference between two lowest energy eigenstates")
+    plt.plot(ratios, Second_and_third_splitting, label="Difference between second and third lowest energy eigenstates")
+    plt.axvline(x=transition_ratio, color='r', linestyle='--', label=f'Transition at {transition_ratio:.3f}')
+
+    plt.title(f"Gaps in low energy states wrt J'/J, N = {N}")
     plt.xlabel("ratio")
-    plt.ylabel("splitting")
-    if fname != None:    
-        plt.savefig(fname)
+    plt.ylabel("Energy")
+    
+    # Adjust legend below the plot with modified text size and column count
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), shadow=True, ncol=1, fontsize='small')
+    plt.tight_layout(rect=[0, 0.15, 1, 1])  # Adjust the layout to make space for the legend below the chart
+
+    if fname1:
+        plt.savefig(fname1, format='pdf', bbox_inches='tight')  # Save with tight bounding box to include legend
+
     plt.show()
+
+
+def get_critical_J_SSN(basis, N: int, tol = 10**-9, maxitr = 40):
+    ratio_interval = np.array([0,0.5])  # Combine and sort the arrays, remove duplicates
+
+    H_1 = generate_hammiltonian_matrix(N, basis, H_heisenberg_chain)
+    H_2 = generate_hammiltonian_matrix(N, basis, H_second_nearest)
+
+    itr = int(np.ceil(np.log2(np.sum(ratio_interval)/tol)))
+
+    for i in range(np.min(np.array([itr,maxitr]))):
+        new_ratio = 0.5*np.sum(ratio_interval) 
+        H = add_H_matrices(H_1, scalar_mul_H_matrices(new_ratio, H_2))
+        spectrum = fulldiag(H, N, basis, return_eigenbasis=False)
+        fullspectrum = get_fullspectrum_sorted(spectrum)
+
+        idx = int(np.isclose(fullspectrum[1],spectrum[0][0][1]))
+        ratio_interval[idx] = new_ratio
+    
+    return ratio_interval[0], itr
+
+
+def plot_Jc_convergence(figname="fig.pdf"):
+    N = 14
+    number_of_spins = np.arange(4, N + 1, 2, dtype=int)
+    critical = np.zeros_like(number_of_spins, dtype=float)
+    for i, n in enumerate(number_of_spins):
+        if n == 12:
+            basis = load_spin_basis('12_spin_system.npz')
+        elif n == 14:
+            basis = load_spin_basis('14_spin_system.npz')
+        else:    
+            basis = get_spin_system(n)
+        
+        critical_i, itr = get_critical_J_SSN(basis, n)
+        print(critical_i)
+        critical[i] = critical_i
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(number_of_spins, critical, marker='o', label='Computed J/J\'')
+    plt.axhline(y=0.241167, color='r', linestyle='--', label='High-Precision Numerical Estimate (0.241167)')
+    plt.title('Convergence of Critical J/J\' with Increasing Spin Count')
+    plt.xlabel('Number of Spins')
+    plt.ylabel('Critical J/J\' Ratio')
+
+    # Adjust legend position below the plot and modify font size and column configuration
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), shadow=True, ncol=1, fontsize='small')
+    
+    plt.grid(True)
+    plt.tight_layout(rect=[0, 0.15, 1, 1])  # Increase the bottom margin to avoid cutting off labels
+    plt.savefig(figname, format='pdf', bbox_inches='tight')  # Ensure the legend is included in the save
+    plt.show()
+
+
+
+
+
 
 
 def Mujamdar_Gosh_Symmetry_investigation(basis ,N: int, fname = None):
@@ -1172,6 +1237,11 @@ def Eigenbasis(basis, N: int):
     
 # main
 def main():
+    # spin_system = get_spin_system(3)
+    # print_spin_system(spin_system)
+
+    
+    
     #Initialize and print the spin system for demonstration purposes
     #one_two_three_spin_test()
     #test_save_and_load_spin_system()
@@ -1182,13 +1252,18 @@ def main():
     #normtest(spin_system)
 
     #test_operators()
-    #spin_system = get_spin_system(12)
+    spin_system = get_spin_system(8)
     #save_spin_basis(spin_system,'12_spin_system.npz' )
-    spin_system = load_spin_basis('14_spin_system.npz')
+    #spin_system = load_spin_basis('14_spin_system.npz')
+    #normtest(spin_system)
     #hammiltonian_test(12, print_matrices=False)
-    #diagonalization_test(spin_system, 12, "Heisenberg_N12_spectrum.pdf")
-    #Majumdar_Gosh_test(spin_system, 12, "Majumdar_Gosh_N12_spectrum.pdf")
-    Mujamdar_Gosh_splitting(spin_system, 14, 41, fname="Second_nn_splitting.pdf")
+    #diagonalization_test(spin_system, 8, "Heisenberg_N8_spectrum.pdf")
+    Majumdar_Gosh_test(spin_system, 8, "Majumdar_Gosh_N8_spectrum.pdf")
+    #Mujamdar_Gosh_splitting(spin_system, 14, 40, fname1="Second_nn_splitting_N14.pdf")
+    #crit, i = get_critical_J_SSN(spin_system, 12)
+    #print(crit)
+    #plot_Jc_convergence("ConvergenceOfJ_cWrt.pdf")
+
     #Mujamdar_Gosh_Symmetry_investigation(spin_system, 8)
     #Eigenbasis(spin_system, 8)
 

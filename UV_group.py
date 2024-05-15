@@ -185,6 +185,30 @@ def calculate_omega(group_elements):
 
     return omega_matrix
 
+def calculate_omega_reduced(group_elements):
+    """
+    Calculate the omega matrix for a set of group elements, based on specific conditions.
+    
+    Args:
+    - group_elements (list): A list of numpy arrays representing the group elements.
+    
+    Returns:
+    - np.ndarray: The omega matrix, where each element omega_matrix[i, j] represents the phase (-1 or 1) calculated based on the conditions applied to elements g and h.
+    
+    The calculation of the omega matrix involves determining the phase for each pair of group elements based on specific bitwise conditions.
+    """
+    num_elements = len(group_elements)  # Get the number of elements in the group.
+    # Initialize the omega matrix with 1s.
+    omega_matrix = np.ones((num_elements, num_elements), dtype=int)
+
+    for i, g in enumerate(group_elements):
+        for j, h in enumerate(group_elements):
+            # Calculate the phase based on specific conditions involving bits of g and h.
+            omega = -1 if (g[1] and h[0]) else 1
+            omega_matrix[i, j] = omega  # Set the phase in the omega matrix.
+
+    return omega_matrix
+    
 
 def plot_omega_matrix(omega_matrix, figname = None):
     """
@@ -210,7 +234,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.colors import ListedColormap
 
-def plot_mul_table(mul_table, figname=None):
+
+
+def plot_mul_table(mul_table, figname=None, is_signed = True):
     """
     Visualize the multiplication table of a group with boolean array elements.
     
@@ -230,12 +256,14 @@ def plot_mul_table(mul_table, figname=None):
     for i in range(num_elements):
         for j in range(num_elements):
             sign_bit = mul_table[i, j][0]
-            value = bool_array_to_int(mul_table[i, j], is_signed=True)
+            value = bool_array_to_int(mul_table[i, j], is_signed)
             display_matrix[i, j] = abs(value)
             color_matrix[i, j] = -1 if sign_bit == 1 else 1  # -1 for blue, 1 for red
 
     # Create a custom colormap
-    cmap = ListedColormap(['gray', 'white'])
+    cmap = ListedColormap(['white'])
+    if is_signed:
+        cmap = ListedColormap(['gray', 'white'])
 
     sns.set()
     plt.figure(figsize=(10, 8))
@@ -306,6 +334,7 @@ def main():
     mul_table = generate_mul_table(group_elements, simple_multiplication)
     omega_matrix = calculate_omega(group_elements)
     plot_omega_matrix(omega_matrix, "Omega_matrix.pdf")
+    plot_mul_table(mul_table, "H_UV.pdf", False)
 
     covering_group = generate_group_elements(5)
     covering_mul_table = generate_mul_table(covering_group, covering_multiplication)
@@ -322,7 +351,9 @@ def main():
 
     print("Number of CC's = ",len(conjugacy_classes))
 
-
+    smallgroup = generate_group_elements(2)
+    omega_matrix = calculate_omega_reduced(smallgroup)
+    plot_omega_matrix(omega_matrix, "Omega_matrix_reduced.pdf")
     small_covering_group = generate_group_elements(3)
     covering_mul_table = generate_mul_table(small_covering_group, small_covering_multiplication)
 
